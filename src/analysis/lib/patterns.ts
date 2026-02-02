@@ -1,7 +1,8 @@
 // 패턴 감지 함수
 
-import { OHLCVBar } from '../../stock/types/ohlcv.entity';
+import { OHLCVBar, TimeFrame } from '../../stock/types/ohlcv.entity';
 import { BollingerBand, Signal } from '../types/analysis.entity';
+import { getWeights, TwoBarReversalWeights } from './pattern-weights';
 
 // ===== 유틸리티 함수 =====
 
@@ -81,19 +82,24 @@ function analyzeBullishReversal(
   index: number,
   trend: number,
   data: OHLCVBar[],
+  weights: TwoBarReversalWeights,
 ): Signal | null {
   if (!currBB?.lower || !currBB?.upper || !prevBB?.lower) return null;
 
-  // 추세 필터: 강한 하락추세에서만 차단
-  if (trend < -0.05) return null;
+  // 추세 필터: 강한 하락추세(-10% 이상)에서만 차단
+  if (trend < -0.1) return null;
 
-  // 연속 하락 필터: 3주 연속 하락 후 반등은 위험
-  if (index >= 3) {
-    const consecutiveDown =
-      data[index - 3].close > data[index - 2].close &&
-      data[index - 2].close > data[index - 1].close &&
-      data[index - 1].close > prev.close;
-    if (consecutiveDown) return null;
+  // 연속 하락 필터: 5봉 연속 + 15% 이상 하락 시에만 차단
+  if (index >= 5) {
+    let consecutiveCount = 0;
+    let totalDrop = 0;
+    for (let i = index - 4; i <= index; i++) {
+      if (data[i].close < data[i - 1].close) {
+        consecutiveCount++;
+        totalDrop += (data[i - 1].close - data[i].close) / data[i - 1].close;
+      }
+    }
+    if (consecutiveCount >= 5 && totalDrop > 0.15) return null;
   }
 
   const bbWidth = currBB.upper - currBB.lower;
@@ -104,26 +110,30 @@ function analyzeBullishReversal(
   const currInsideBB = curr.close >= currBB.lower && curr.close <= currBB.upper;
   const confirmed = prevBreachedLower && currInsideBB;
 
-  let baseConfidence = confirmed ? 90 : 55;
+  // 추세 필터 강화: 하락추세에서는 confirmed + 거래량 필수
+  if (trend < -0.03 && (!confirmed || !volumeConfirm)) return null;
+  // 횡보에서는 confirmed 또는 거래량 필수
+  if (trend < 0.02 && !confirmed && !volumeConfirm) return null;
+
+  let baseConfidence = confirmed
+    ? weights.baseConfidenceConfirmed
+    : weights.baseConfidenceUnconfirmed;
 
   // 추세 기반 신뢰도 조정
-  if (trend > 0.1)
-    baseConfidence += 25; // 강한 상승추세 보너스
-  else if (trend > 0.05)
-    baseConfidence += 20; // 상승추세 보너스
-  else if (trend > 0)
-    baseConfidence += 15; // 약한 상승추세 보너스
-  else baseConfidence -= 20; // 하락추세 페널티
+  if (trend < -0.05) baseConfidence -= weights.trendPenalty;
+  else if (trend > 0.1) baseConfidence += weights.trendBonus + 15;
+  else if (trend > 0.05) baseConfidence += weights.trendBonus + 8;
+  else if (trend > 0.02) baseConfidence += weights.trendBonus;
 
   if (!confirmed) {
     if (prev.low < currBB.lower * 1.01) baseConfidence += 15;
     if (pricePosition < 0.3) baseConfidence += 15;
   }
-  if (volumeConfirm) baseConfidence += 15;
-  if (curr.close > prev.high) baseConfidence += 15;
+  if (volumeConfirm) baseConfidence += weights.volumeBonus;
+  if (curr.close > prev.high) baseConfidence += weights.priceBreakBonus;
 
   const confidence = Math.min(100, baseConfidence);
-  if (confidence < 60) return null;
+  if (confidence < weights.minConfidence) return null;
 
   return {
     index,
@@ -153,6 +163,7 @@ function analyzeBearishReversal(
   currATR: number,
   volumeConfirm: boolean,
   index: number,
+  weights: TwoBarReversalWeights,
 ): Signal | null {
   if (!currBB?.lower || !currBB?.upper || !prevBB?.upper) return null;
 
@@ -164,17 +175,19 @@ function analyzeBearishReversal(
   const currInsideBB = curr.close >= currBB.lower && curr.close <= currBB.upper;
   const confirmed = prevBreachedUpper && currInsideBB;
 
-  let baseConfidence = confirmed ? 85 : 50;
+  let baseConfidence = confirmed
+    ? weights.baseConfidenceConfirmed
+    : weights.baseConfidenceUnconfirmed - 15;
 
   if (!confirmed) {
     if (prev.high > currBB.upper * 0.99) baseConfidence += 15;
     if (pricePosition > 0.7) baseConfidence += 15;
   }
-  if (volumeConfirm) baseConfidence += 15;
-  if (curr.close < prev.low) baseConfidence += 15;
+  if (volumeConfirm) baseConfidence += weights.volumeBonus;
+  if (curr.close < prev.low) baseConfidence += weights.priceBreakBonus;
 
   const confidence = Math.min(100, baseConfidence);
-  if (confidence < 60) return null;
+  if (confidence < weights.minConfidence) return null;
 
   return {
     index,
@@ -203,9 +216,11 @@ export const detectTwoBarReversal = (
   data: OHLCVBar[],
   bb: BollingerBand[],
   atrValues: (number | null)[],
+  timeFrame: TimeFrame = 'daily',
 ): Signal[] => {
   const signals: Signal[] = [];
   const avgVolumes = calculateAverageVolume(data, 20);
+  const weights = getWeights(timeFrame).twoBarReversal;
 
   for (let i = 1; i < data.length; i++) {
     const prev = data[i - 1];
@@ -249,6 +264,7 @@ export const detectTwoBarReversal = (
         i,
         trend,
         data,
+        weights,
       );
       if (signal) signals.push(signal);
     }
@@ -268,6 +284,7 @@ export const detectTwoBarReversal = (
         currATR,
         volumeConfirm,
         i,
+        weights,
       );
       if (signal) signals.push(signal);
     }
@@ -285,13 +302,22 @@ export const detectTwoBarReversal = (
 export const detectWBottom = (
   data: OHLCVBar[],
   bb: BollingerBand[],
-  options: { requireBreakout?: boolean; maxLookAhead?: number } = {},
+  options: {
+    requireBreakout?: boolean;
+    maxLookAhead?: number;
+    timeFrame?: TimeFrame;
+  } = {},
 ): Signal[] => {
   const signals: Signal[] = [];
-  const { requireBreakout = true, maxLookAhead = 5 } = options;
+  const {
+    requireBreakout = true,
+    maxLookAhead = 5,
+    timeFrame = 'daily',
+  } = options;
+  const weights = getWeights(timeFrame).wBottom;
 
   for (let i = 4; i < data.length - (requireBreakout ? maxLookAhead : 0); i++) {
-    // 추세 필터: 강한 하락추세에서 W바닥 매수 차단
+    // 추세 필터: 하락추세(-5%)에서 차단
     const trend = calculateTrend(data, i);
     if (trend < -0.05) continue;
 
@@ -309,8 +335,9 @@ export const detectWBottom = (
     const low2BB = bb[low2Idx];
 
     const lowDiff = Math.abs(low1 - low2) / low1;
+    // 저점 간격 timeFrame별 차등 적용
     const isWBottom =
-      lowDiff < 0.03 &&
+      lowDiff < weights.maxLowDiff &&
       low2 < high &&
       low1 < high &&
       high > low1 * 1.02 &&
@@ -343,9 +370,17 @@ export const detectWBottom = (
 
     if (!breakoutConfirmed) continue;
 
+    // confirmed=false인 경우 신호 발생하지 않음 (품질 향상)
+    if (!confirmed) continue;
+
     const bbRecovery = low2BB?.lower != null && low2Close >= low2BB.lower;
-    let confidence = confirmed ? 85 : (1 - lowDiff) * 50;
-    if (bbRecovery) confidence += 15;
+    let confidence = weights.baseConfidenceConfirmed;
+
+    // 저점 대칭도에 따른 신뢰도 차등
+    if (lowDiff < 0.03) confidence += weights.perfectSymmetryBonus;
+    else if (lowDiff < 0.05) confidence += weights.goodSymmetryBonus;
+
+    if (bbRecovery) confidence += weights.bbRecoveryBonus;
 
     confidence = Math.min(100, Math.max(50, confidence));
 
@@ -378,14 +413,16 @@ export const detectWBottom = (
  * - BB 하단 터치 후 양봉 반등 → bb_bounce_buy (매수)
  * - BB 상단 터치 후 음봉 반락 → bb_rejection_sell (매도)
  * - BB Squeeze(변동성 수축) 상태에서 반등/반락 시 신뢰도 추가 상승
- * - 거래량이 평균의 1.2배 이상일 때만 신호 발생
+ * - 거래량은 가산점으로만 활용
  */
 export const detectBollingerSignals = (
   data: OHLCVBar[],
   bb: BollingerBand[],
+  timeFrame: TimeFrame = 'daily',
 ): Signal[] => {
   const signals: Signal[] = [];
   const avgVolumes = calculateAverageVolume(data, 20);
+  const weights = getWeights(timeFrame).bollinger;
 
   for (let i = 2; i < data.length; i++) {
     const currBB = bb[i];
@@ -402,24 +439,44 @@ export const detectBollingerSignals = (
     const bbWidthPrev = prevBB.upper - prevBB.lower;
     const isSqueeze = bbWidth < bbWidthPrev * 0.7;
 
-    const volumeOk = avgVolumes[i] > 0 && curr.volume > avgVolumes[i] * 1.2;
+    const volumeConfirm =
+      avgVolumes[i] > 0 && curr.volume > avgVolumes[i] * 1.2;
 
-    // 하단 반등 (매수) - 강한 하락추세에서 차단
-    const touchedLower = prev.low <= prevBB.lower * 1.01;
+    // 하단 반등 (매수) - BB 터치 또는 이탈 후 반등
+    const touchedOrBreachedLower = prev.low <= prevBB.lower * 1.01;
+    const prevBreachedLower = prev.low < prevBB.lower;
     const bouncingFromLower =
-      touchedLower &&
+      touchedOrBreachedLower &&
       curr.close > curr.open &&
       curr.close > prevBB.lower &&
-      volumeOk &&
-      trend >= -0.05; // 추세 필터
+      trend >= -0.1;
+
+    // 추세 필터: 하락추세(-3%)에서는 BB 이탈 + 거래량 필수
+    if (
+      bouncingFromLower &&
+      trend < -0.03 &&
+      (!prevBreachedLower || !volumeConfirm)
+    )
+      continue;
+    // 횡보에서는 BB 이탈 또는 거래량 필수
+    if (bouncingFromLower && trend < 0 && !prevBreachedLower && !volumeConfirm)
+      continue;
 
     if (bouncingFromLower) {
-      let confidence = 70;
-      if (isSqueeze) confidence += 15;
-      if (curr.close > prev.high) confidence += 15;
-      if (trend < 0) confidence -= 15; // 약한 하락추세 페널티
+      let confidence = weights.baseConfidence;
+      // BB 이탈 후 복귀 시 추가 보너스
+      if (prevBreachedLower && curr.close >= currBB.lower) {
+        confidence += 12;
+      }
+      if (volumeConfirm) confidence += weights.volumeBonus;
+      if (isSqueeze) confidence += weights.squeezeBonus;
+      if (curr.close > prev.high) confidence += weights.priceBreakBonus;
+      if (trend < -0.03) confidence -= weights.trendPenalty;
+      else if (trend > 0.1) confidence += weights.trendBonus + 15;
+      else if (trend > 0.05) confidence += weights.trendBonus + 8;
+      else if (trend > 0.02) confidence += weights.trendBonus;
 
-      if (confidence >= 60) {
+      if (confidence >= 65) {
         signals.push({
           index: i,
           date: curr.date,
@@ -439,15 +496,13 @@ export const detectBollingerSignals = (
     // 상단 반락 (매도)
     const touchedUpper = prev.high >= prevBB.upper * 0.99;
     const rejectingFromUpper =
-      touchedUpper &&
-      curr.close < curr.open &&
-      curr.close < prevBB.upper &&
-      volumeOk;
+      touchedUpper && curr.close < curr.open && curr.close < prevBB.upper;
 
     if (rejectingFromUpper) {
-      let confidence = 70;
-      if (isSqueeze) confidence += 15;
-      if (curr.close < prev.low) confidence += 15;
+      let confidence = weights.baseConfidence;
+      if (volumeConfirm) confidence += weights.volumeBonus;
+      if (isSqueeze) confidence += weights.squeezeBonus;
+      if (curr.close < prev.low) confidence += weights.priceBreakBonus;
 
       signals.push({
         index: i,

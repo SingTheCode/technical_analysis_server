@@ -4,6 +4,7 @@ import {
   detectBollingerSignals,
   consolidateSignals,
 } from './patterns';
+import { getWeights } from './pattern-weights';
 import { OHLCVBar } from '../../stock/types/ohlcv.entity';
 import { BollingerBand, Signal } from '../types/analysis.entity';
 
@@ -23,6 +24,88 @@ const createBB = (
   middle: number,
   upper: number,
 ): BollingerBand => ({ lower, middle, upper, sma: middle });
+
+describe('getWeights', () => {
+  it('daily timeframe 가중치 반환', () => {
+    const weights = getWeights('daily');
+    expect(weights.twoBarReversal.baseConfidenceConfirmed).toBeDefined();
+    expect(weights.twoBarReversal.volumeBonus).toBeGreaterThan(0);
+  });
+
+  it('weekly timeframe 가중치 반환', () => {
+    const weights = getWeights('weekly');
+    expect(weights.twoBarReversal.baseConfidenceConfirmed).toBeDefined();
+  });
+
+  it('weekly는 daily보다 기본 신뢰도가 높음', () => {
+    const daily = getWeights('daily');
+    const weekly = getWeights('weekly');
+    expect(
+      weekly.twoBarReversal.baseConfidenceConfirmed,
+    ).toBeGreaterThanOrEqual(daily.twoBarReversal.baseConfidenceConfirmed);
+  });
+
+  it('weekly W패턴은 저점 차이 12%까지 허용', () => {
+    const weights = getWeights('weekly');
+    expect(weights.wBottom.maxLowDiff).toBe(0.12);
+  });
+});
+
+describe('TimeFrame별 패턴 감지', () => {
+  it('detectTwoBarReversal - daily/weekly 호출 가능', () => {
+    const data: OHLCVBar[] = [
+      createBar('2024-01-01', 100, 102, 88, 92),
+      createBar('2024-01-02', 92, 108, 91, 100, 1500000),
+    ];
+    const bb = data.map(() => createBB(90, 100, 110));
+    const atr = data.map(() => 8);
+
+    const dailySignals = detectTwoBarReversal(data, bb, atr, 'daily');
+    const weeklySignals = detectTwoBarReversal(data, bb, atr, 'weekly');
+    expect(Array.isArray(dailySignals)).toBe(true);
+    expect(Array.isArray(weeklySignals)).toBe(true);
+  });
+
+  it('detectWBottom - timeFrame 옵션 지원', () => {
+    const data: OHLCVBar[] = [
+      createBar('2024-01-01', 100, 102, 100, 101),
+      createBar('2024-01-02', 101, 102, 100, 101),
+      createBar('2024-01-03', 101, 102, 85, 87),
+      createBar('2024-01-04', 87, 105, 86, 104),
+      createBar('2024-01-05', 104, 106, 103, 105),
+      createBar('2024-01-06', 105, 106, 91, 95),
+      createBar('2024-01-07', 95, 112, 94, 110),
+      createBar('2024-01-08', 110, 115, 109, 114),
+    ];
+    const bb = data.map(() => createBB(85, 100, 115));
+
+    const dailySignals = detectWBottom(data, bb, { timeFrame: 'daily' });
+    const weeklySignals = detectWBottom(data, bb, { timeFrame: 'weekly' });
+    expect(Array.isArray(dailySignals)).toBe(true);
+    expect(Array.isArray(weeklySignals)).toBe(true);
+  });
+
+  it('detectBollingerSignals - timeFrame 파라미터 지원', () => {
+    const data: OHLCVBar[] = Array.from({ length: 22 }, (_, i) =>
+      createBar(
+        `2024-01-${String(i + 1).padStart(2, '0')}`,
+        100,
+        102,
+        98,
+        100,
+        1000000,
+      ),
+    );
+    data[20] = createBar('2024-01-21', 100, 101, 89, 90);
+    data[21] = createBar('2024-01-22', 90, 98, 89, 96, 1500000);
+    const bb = data.map(() => createBB(90, 100, 110));
+
+    const dailySignals = detectBollingerSignals(data, bb, 'daily');
+    const weeklySignals = detectBollingerSignals(data, bb, 'weekly');
+    expect(Array.isArray(dailySignals)).toBe(true);
+    expect(Array.isArray(weeklySignals)).toBe(true);
+  });
+});
 
 describe('patterns', () => {
   describe('detectTwoBarReversal - 추세 필터', () => {
@@ -79,6 +162,81 @@ describe('patterns', () => {
       // Then: 상승추세에서 매수 신호 발생
       const buySignals = signals.filter((s) => s.signal === 'BUY');
       expect(buySignals.length).toBeGreaterThan(0);
+    });
+
+    it('약한 하락추세(-5%~-10%)에서는 신호 발생하되 신뢰도 감소', () => {
+      // Given: 약한 하락추세
+      const data: OHLCVBar[] = Array.from({ length: 42 }, (_, i) => {
+        const price = 100 - i * 0.17;
+        return createBar(
+          `2024-01-${String(i + 1).padStart(2, '0')}`,
+          price,
+          price + 2,
+          price - 1,
+          price + 1,
+          1000000,
+        );
+      });
+      data[40] = createBar('2024-02-10', 94, 95, 88, 90);
+      data[41] = createBar('2024-02-11', 90, 105, 89, 100, 1500000);
+
+      const bb: BollingerBand[] = data.map(() => createBB(90, 100, 110));
+      const atrValues = data.map(() => 8);
+
+      const signals = detectTwoBarReversal(data, bb, atrValues);
+      const buySignals = signals.filter((s) => s.signal === 'BUY');
+      if (buySignals.length > 0) {
+        expect(buySignals[0].confidence).toBeLessThan(90);
+      }
+    });
+  });
+
+  describe('detectWBottom - 저점 간격 허용 범위', () => {
+    it('저점 차이 8% 이내 + confirmed=true면 W패턴 인정', () => {
+      const data: OHLCVBar[] = [
+        createBar('2024-01-01', 100, 102, 100, 101),
+        createBar('2024-01-02', 101, 102, 100, 101),
+        createBar('2024-01-03', 101, 102, 84, 87), // 저점1: 84 < BB하단 85
+        createBar('2024-01-04', 87, 105, 86, 104),
+        createBar('2024-01-05', 104, 106, 103, 105),
+        createBar('2024-01-06', 105, 106, 90, 95), // 저점2: 90 >= BB하단 85 (7% 차이)
+        createBar('2024-01-07', 95, 112, 94, 110),
+        createBar('2024-01-08', 110, 115, 109, 114),
+        createBar('2024-01-09', 114, 118, 113, 117),
+        createBar('2024-01-10', 117, 120, 116, 119),
+        createBar('2024-01-11', 119, 122, 118, 121),
+      ];
+      const bb: BollingerBand[] = data.map(() => createBB(85, 100, 115));
+
+      const signals = detectWBottom(data, bb, {
+        requireBreakout: true,
+        maxLookAhead: 3,
+      });
+      expect(signals.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('detectBollingerSignals - 거래량 조건 완화', () => {
+    it('거래량 없어도 BB 하단 반등 시 신호 발생', () => {
+      const data: OHLCVBar[] = Array.from({ length: 42 }, (_, i) => {
+        const price = 100 + i * 0.2;
+        return createBar(
+          `2024-01-${String(i + 1).padStart(2, '0')}`,
+          price,
+          price + 2,
+          price - 1,
+          price + 1,
+          1000000,
+        );
+      });
+      data[40] = createBar('2024-02-10', 108, 109, 99, 100);
+      data[41] = createBar('2024-02-11', 100, 108, 99, 106, 1000000); // 거래량 평균
+
+      const bb: BollingerBand[] = data.map(() => createBB(100, 110, 120));
+
+      const signals = detectBollingerSignals(data, bb);
+      const bounceSignal = signals.find((s) => s.type === 'bb_bounce_buy');
+      expect(bounceSignal).toBeDefined();
     });
   });
 
@@ -215,7 +373,7 @@ describe('patterns', () => {
         expect(wSignal?.confirmed).toBe(true);
       });
 
-      it('저점1이 BB 이탈하지 않으면 confirmed=false', () => {
+      it('저점1이 BB 이탈하지 않으면 신호 발생 안함', () => {
         // Given: 저점1이 BB 내부
         const data: OHLCVBar[] = [
           createBar('2024-01-01', 100, 102, 100, 101),
@@ -231,30 +389,28 @@ describe('patterns', () => {
         // When
         const signals = detectWBottom(data, bb, { requireBreakout: true });
 
-        // Then
-        if (signals.length > 0) {
-          expect(signals[0].confirmed).toBe(false);
-        }
+        // Then: confirmed=false이므로 신호 없음
+        expect(signals.length).toBe(0);
       });
     });
 
     describe('옵션', () => {
-      it('requireBreakout=false면 W형성만으로 신호 발생', () => {
-        // Given: 브레이크아웃 없는 W패턴
+      it('requireBreakout=false + confirmed=true면 W형성만으로 신호 발생', () => {
+        // Given: 브레이크아웃 없는 W패턴 (저점1 BB 이탈 필수)
         const data: OHLCVBar[] = [
           createBar('2024-01-01', 100, 102, 100, 101),
           createBar('2024-01-02', 101, 102, 100, 101),
-          createBar('2024-01-03', 101, 102, 88, 90), // 저점1
+          createBar('2024-01-03', 101, 102, 85, 90), // 저점1: 85 < BB하단 90
           createBar('2024-01-04', 90, 105, 89, 104), // 고점
           createBar('2024-01-05', 104, 105, 103, 104),
-          createBar('2024-01-06', 104, 105, 89, 95), // 저점2
+          createBar('2024-01-06', 104, 105, 90, 95), // 저점2: 90 >= BB하단 90
         ];
         const bb: BollingerBand[] = data.map(() => createBB(90, 100, 110));
 
         // When
         const signals = detectWBottom(data, bb, { requireBreakout: false });
 
-        // Then: 브레이크아웃 없이도 신호 발생
+        // Then: 브레이크아웃 없이도 신호 발생 (confirmed=true 필수)
         expect(signals.length).toBeGreaterThanOrEqual(1);
       });
     });

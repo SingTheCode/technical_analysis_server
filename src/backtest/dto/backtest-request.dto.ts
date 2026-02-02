@@ -1,4 +1,11 @@
-import { IsString, IsNumber, IsOptional, Min, Max, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  Min,
+  Max,
+  IsIn,
+} from 'class-validator';
 
 export class BacktestRequestDto {
   @IsString()

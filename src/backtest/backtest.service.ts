@@ -31,9 +31,9 @@ export class BacktestService {
     const bb = calculateBollingerBands(data, params.bbPeriod, params.bbStdMult);
 
     const signals: Signal[] = [
-      ...detectTwoBarReversal(data, bb, atrValues),
-      ...detectWBottom(data, bb),
-      ...detectBollingerSignals(data, bb),
+      ...detectTwoBarReversal(data, bb, atrValues, timeFrame),
+      ...detectWBottom(data, bb, { timeFrame }),
+      ...detectBollingerSignals(data, bb, timeFrame),
     ].sort((a, b) => a.index - b.index);
 
     return runSimulation(data, signals, params);
