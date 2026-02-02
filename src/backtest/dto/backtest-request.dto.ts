@@ -1,8 +1,12 @@
-import { IsString, IsNumber, IsOptional, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, Max, IsIn } from 'class-validator';
 
 export class BacktestRequestDto {
   @IsString()
   ticker: string;
+
+  @IsOptional()
+  @IsIn(['daily', 'weekly'])
+  timeFrame?: 'daily' | 'weekly';
 
   @IsNumber()
   @Min(1000)

@@ -7,6 +7,7 @@ export interface BacktestParams extends Omit<AnalysisParams, 'timeFrame'> {
   stopLossPercent?: number;
   takeProfitPercent?: number;
   minConfidence?: number;
+  timeFrame?: 'daily' | 'weekly';
 }
 
 export interface Trade {

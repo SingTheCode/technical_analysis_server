@@ -13,14 +13,19 @@ import {
 } from '../analysis/lib/patterns';
 import { Signal } from '../analysis/types/analysis.entity';
 
-const BACKTEST_PERIOD = { daily: '1y', weekly: '2y' } as const;
+const BACKTEST_PERIOD = { daily: '1y', weekly: '3y' } as const;
 
 @Injectable()
 export class BacktestService {
   constructor(private readonly stockService: StockService) {}
 
   async runBacktest(params: BacktestParams): Promise<BacktestResult> {
-    const { data } = await this.stockService.getOHLCV(params.ticker, 'daily', BACKTEST_PERIOD.daily);
+    const timeFrame = params.timeFrame ?? 'daily';
+    const { data } = await this.stockService.getOHLCV(
+      params.ticker,
+      timeFrame,
+      BACKTEST_PERIOD[timeFrame],
+    );
 
     const atrValues = calculateATR(data, params.atrPeriod);
     const bb = calculateBollingerBands(data, params.bbPeriod, params.bbStdMult);
