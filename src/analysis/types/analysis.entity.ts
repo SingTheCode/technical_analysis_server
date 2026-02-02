@@ -6,6 +6,7 @@ export interface BollingerBand {
   sma: number | null;
   upper: number | null;
   lower: number | null;
+  middle?: number | null;
 }
 
 export type SignalType =
@@ -13,7 +14,9 @@ export type SignalType =
   | 'two_bar_bearish'
   | 'w_bottom'
   | 'bb_buy'
-  | 'bb_sell';
+  | 'bb_sell'
+  | 'bb_bounce_buy'
+  | 'bb_rejection_sell';
 
 export type SignalDirection = 'BUY' | 'SELL';
 
@@ -30,6 +33,8 @@ export interface Signal {
   bbRecovery?: boolean;
   atr?: number;
   chandelierMultiplier?: number;
+  confirmed?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AnalysisParams {
