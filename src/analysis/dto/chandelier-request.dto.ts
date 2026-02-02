@@ -1,20 +1,11 @@
-import { IsArray, IsNumber, IsIn, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
-
-class OHLCVBarDto {
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
+import { IsString, IsNumber, IsIn } from 'class-validator';
 
 export class ChandelierRequestDto {
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => OHLCVBarDto)
-  data: OHLCVBarDto[];
+  @IsString()
+  ticker: string;
+
+  @IsIn(['daily', 'weekly'])
+  timeFrame: 'daily' | 'weekly';
 
   @IsIn(['BUY', 'SELL'])
   position: 'BUY' | 'SELL';

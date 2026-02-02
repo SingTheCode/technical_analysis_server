@@ -1,5 +1,6 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { OHLCVBar } from '../stock/types/ohlcv.entity';
+import { StockService } from '../stock/stock.service';
+import { TimeFrame } from '../stock/types/ohlcv.entity';
 import {
   AnalysisParams,
   AnalysisResult,
@@ -22,7 +23,16 @@ export interface ChandelierResult {
 
 @Injectable()
 export class AnalysisService {
-  analyze(rawData: OHLCVBar[], params: AnalysisParams): AnalysisResult {
+  constructor(private readonly stockService: StockService) {}
+
+  async analyze(
+    ticker: string,
+    params: AnalysisParams,
+  ): Promise<AnalysisResult> {
+    const { data: rawData } = await this.stockService.getOHLCV(
+      ticker,
+      params.timeFrame,
+    );
     const data =
       params.timeFrame === 'weekly' ? transformDailyToWeekly(rawData) : rawData;
 
@@ -66,12 +76,15 @@ export class AnalysisService {
     };
   }
 
-  calculateChandelier(
-    data: OHLCVBar[],
+  async calculateChandelier(
+    ticker: string,
+    timeFrame: TimeFrame,
     position: 'BUY' | 'SELL',
     atrPeriod: number,
     multiplier: number,
-  ): ChandelierResult {
+  ): Promise<ChandelierResult> {
+    const { data } = await this.stockService.getOHLCV(ticker, timeFrame);
+
     if (data.length < atrPeriod) {
       throw new HttpException(
         `최소 ${atrPeriod}개 이상의 데이터가 필요합니다`,

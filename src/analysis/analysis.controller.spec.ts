@@ -25,7 +25,7 @@ describe('AnalysisController', () => {
   });
 
   describe('analyze', () => {
-    it('분석 요청을 처리하고 결과를 반환한다', () => {
+    it('ticker와 params로 분석을 요청하고 결과를 반환한다', async () => {
       const mockResult = {
         signals: [],
         stats: {
@@ -39,19 +39,10 @@ describe('AnalysisController', () => {
         data: [],
         bollingerBands: [],
       };
-      jest.spyOn(service, 'analyze').mockReturnValue(mockResult);
+      jest.spyOn(service, 'analyze').mockResolvedValue(mockResult);
 
       const requestDto = {
-        data: [
-          {
-            date: '2024-01-01',
-            open: 100,
-            high: 105,
-            low: 98,
-            close: 103,
-            volume: 1000000,
-          },
-        ],
+        ticker: 'AAPL',
         params: {
           bbPeriod: 20,
           bbStdMult: 2,
@@ -61,48 +52,35 @@ describe('AnalysisController', () => {
         },
       };
 
-      const result = controller.analyze(requestDto);
+      const result = await controller.analyze(requestDto);
 
-      expect(service.analyze).toHaveBeenCalledWith(
-        requestDto.data,
-        requestDto.params,
-      );
+      expect(service.analyze).toHaveBeenCalledWith('AAPL', requestDto.params);
       expect(result).toEqual(mockResult);
     });
   });
 
   describe('calculateChandelier', () => {
-    it('샹들리에 청산가를 계산하고 반환한다', () => {
-      // Given: 서비스 mock 설정
+    it('ticker와 timeFrame으로 샹들리에 청산가를 계산한다', async () => {
       const mockResult = {
         exitPrice: 95.5,
         atr: 5.0,
         highestHigh: 110.5,
       };
-      jest.spyOn(service, 'calculateChandelier').mockReturnValue(mockResult);
+      jest.spyOn(service, 'calculateChandelier').mockResolvedValue(mockResult);
 
       const requestDto = {
-        data: [
-          {
-            date: '2024-01-01',
-            open: 100,
-            high: 105,
-            low: 98,
-            close: 103,
-            volume: 1000000,
-          },
-        ],
+        ticker: 'AAPL',
+        timeFrame: 'daily' as const,
         position: 'BUY' as const,
         atrPeriod: 14,
         multiplier: 3,
       };
 
-      // When: 컨트롤러 호출
-      const result = controller.calculateChandelier(requestDto);
+      const result = await controller.calculateChandelier(requestDto);
 
-      // Then: 서비스가 올바른 파라미터로 호출되고 결과 반환
       expect(service.calculateChandelier).toHaveBeenCalledWith(
-        requestDto.data,
+        'AAPL',
+        'daily',
         'BUY',
         14,
         3,

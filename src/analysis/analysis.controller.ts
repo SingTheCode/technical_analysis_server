@@ -8,14 +8,15 @@ export class AnalysisController {
   constructor(private readonly analysisService: AnalysisService) {}
 
   @Post()
-  analyze(@Body() dto: AnalysisRequestDto) {
-    return this.analysisService.analyze(dto.data, dto.params);
+  async analyze(@Body() dto: AnalysisRequestDto) {
+    return this.analysisService.analyze(dto.ticker, dto.params);
   }
 
   @Post('chandelier')
-  calculateChandelier(@Body() dto: ChandelierRequestDto) {
+  async calculateChandelier(@Body() dto: ChandelierRequestDto) {
     return this.analysisService.calculateChandelier(
-      dto.data,
+      dto.ticker,
+      dto.timeFrame,
       dto.position,
       dto.atrPeriod,
       dto.multiplier,

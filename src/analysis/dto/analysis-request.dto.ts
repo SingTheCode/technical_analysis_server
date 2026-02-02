@@ -1,14 +1,5 @@
-import { IsArray, IsNumber, IsIn, ValidateNested } from 'class-validator';
+import { IsString, IsNumber, IsIn, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-
-class OHLCVBarDto {
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
 
 class AnalysisParamsDto {
   @IsNumber()
@@ -28,10 +19,8 @@ class AnalysisParamsDto {
 }
 
 export class AnalysisRequestDto {
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => OHLCVBarDto)
-  data: OHLCVBarDto[];
+  @IsString()
+  ticker: string;
 
   @ValidateNested()
   @Type(() => AnalysisParamsDto)
