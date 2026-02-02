@@ -19,7 +19,9 @@ export class StockService {
     const interval = INTERVAL_BY_TIMEFRAME[timeFrame];
 
     const url = `${YAHOO_API_BASE}/${ticker}?range=${period}&interval=${interval}`;
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
 
     if (!response.ok) {
       throw new HttpException(

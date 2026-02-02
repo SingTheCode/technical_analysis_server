@@ -12,8 +12,8 @@ export interface OHLCVBar {
 export type TimeFrame = 'daily' | 'weekly';
 
 export const PERIOD_BY_TIMEFRAME: Record<TimeFrame, string> = {
-  daily: '3mo',
-  weekly: '1y',
+  daily: '1y',
+  weekly: '2y',
 };
 
 export const INTERVAL_BY_TIMEFRAME: Record<TimeFrame, string> = {
