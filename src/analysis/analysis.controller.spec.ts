@@ -71,7 +71,6 @@ describe('AnalysisController', () => {
       const requestDto = {
         ticker: 'AAPL',
         timeFrame: 'daily' as const,
-        position: 'BUY' as const,
         atrPeriod: 14,
         multiplier: 3,
       };
@@ -81,7 +80,6 @@ describe('AnalysisController', () => {
       expect(service.calculateChandelier).toHaveBeenCalledWith(
         'AAPL',
         'daily',
-        'BUY',
         14,
         3,
       );

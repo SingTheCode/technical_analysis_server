@@ -87,33 +87,13 @@ describe('AnalysisService', () => {
   });
 
   describe('calculateChandelier', () => {
-    it('ticker로 OHLCV를 조회하고 BUY 포지션 청산가를 계산한다', async () => {
-      const result = await service.calculateChandelier(
-        'AAPL',
-        'daily',
-        'BUY',
-        14,
-        3,
-      );
+    it('ticker로 OHLCV를 조회하고 롱 청산가를 계산한다', async () => {
+      const result = await service.calculateChandelier('AAPL', 'daily', 14, 3);
 
       expect(stockService.getOHLCV).toHaveBeenCalledWith('AAPL', 'daily');
       expect(result).toHaveProperty('exitPrice');
       expect(result).toHaveProperty('atr');
       expect(result).toHaveProperty('highestHigh');
-      expect(result.exitPrice).toBeGreaterThan(0);
-    });
-
-    it('SELL 포지션의 청산가를 계산한다', async () => {
-      const result = await service.calculateChandelier(
-        'AAPL',
-        'daily',
-        'SELL',
-        14,
-        3,
-      );
-
-      expect(result).toHaveProperty('exitPrice');
-      expect(result).toHaveProperty('lowestLow');
       expect(result.exitPrice).toBeGreaterThan(0);
     });
 
@@ -125,7 +105,7 @@ describe('AnalysisService', () => {
       });
 
       await expect(
-        service.calculateChandelier('AAPL', 'daily', 'BUY', 14, 3),
+        service.calculateChandelier('AAPL', 'daily', 14, 3),
       ).rejects.toThrow('최소');
     });
   });

@@ -17,8 +17,7 @@ import {
 export interface ChandelierResult {
   exitPrice: number;
   atr: number;
-  highestHigh?: number;
-  lowestLow?: number;
+  highestHigh: number;
 }
 
 @Injectable()
@@ -79,7 +78,6 @@ export class AnalysisService {
   async calculateChandelier(
     ticker: string,
     timeFrame: TimeFrame,
-    position: 'BUY' | 'SELL',
     atrPeriod: number,
     multiplier: number,
   ): Promise<ChandelierResult> {
@@ -96,34 +94,14 @@ export class AnalysisService {
     const lastIndex = data.length - 1;
     const atr = atrValues[lastIndex]!;
 
-    if (position === 'BUY') {
-      let highestHigh = -Infinity;
-      for (
-        let i = Math.max(0, lastIndex - atrPeriod + 1);
-        i <= lastIndex;
-        i++
-      ) {
-        highestHigh = Math.max(highestHigh, data[i].high);
-      }
-      return {
-        exitPrice: highestHigh - atr * multiplier,
-        atr,
-        highestHigh,
-      };
-    } else {
-      let lowestLow = Infinity;
-      for (
-        let i = Math.max(0, lastIndex - atrPeriod + 1);
-        i <= lastIndex;
-        i++
-      ) {
-        lowestLow = Math.min(lowestLow, data[i].low);
-      }
-      return {
-        exitPrice: lowestLow + atr * multiplier,
-        atr,
-        lowestLow,
-      };
+    let highestHigh = -Infinity;
+    for (let i = Math.max(0, lastIndex - atrPeriod + 1); i <= lastIndex; i++) {
+      highestHigh = Math.max(highestHigh, data[i].high);
     }
+    return {
+      exitPrice: highestHigh - atr * multiplier,
+      atr,
+      highestHigh,
+    };
   }
 }

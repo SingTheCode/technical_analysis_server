@@ -23,13 +23,20 @@ export const calculateATR = (
   }
 
   const atrValues: (number | null)[] = [];
+  let prevATR: number | null = null;
+
   for (let i = 0; i < data.length; i++) {
     if (i < period - 1) {
       atrValues.push(null);
+    } else if (i === period - 1) {
+      // 첫 ATR: SMA
+      const slice = trueRanges.slice(0, period);
+      prevATR = slice.reduce((a, b) => a + b) / period;
+      atrValues.push(prevATR);
     } else {
-      const slice = trueRanges.slice(i - period + 1, i + 1);
-      const atr = slice.reduce((a, b) => a + b) / period;
-      atrValues.push(atr);
+      // 이후: RMA (Wilder's Smoothing)
+      prevATR = (prevATR! * (period - 1) + trueRanges[i]) / period;
+      atrValues.push(prevATR);
     }
   }
 
@@ -67,28 +74,18 @@ export const calculateBollingerBands = (
 };
 
 export const calculateChandelierExit = (
-  signal: { signal: 'BUY' | 'SELL'; index: number },
   data: OHLCVBar[],
   atrValues: (number | null)[],
   lookback: number,
   multiplier: number,
 ): number => {
-  // 최근 봉 기준으로 계산
   const lastIndex = data.length - 1;
   const atr = atrValues[lastIndex];
   if (!atr) return 0;
 
-  if (signal.signal === 'BUY') {
-    let highestHigh = -Infinity;
-    for (let i = Math.max(0, lastIndex - lookback + 1); i <= lastIndex; i++) {
-      highestHigh = Math.max(highestHigh, data[i].high);
-    }
-    return highestHigh - atr * multiplier;
-  } else {
-    let lowestLow = Infinity;
-    for (let i = Math.max(0, lastIndex - lookback + 1); i <= lastIndex; i++) {
-      lowestLow = Math.min(lowestLow, data[i].low);
-    }
-    return lowestLow + atr * multiplier;
+  let highestHigh = -Infinity;
+  for (let i = Math.max(0, lastIndex - lookback + 1); i <= lastIndex; i++) {
+    highestHigh = Math.max(highestHigh, data[i].high);
   }
+  return highestHigh - atr * multiplier;
 };

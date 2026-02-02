@@ -7,9 +7,6 @@ export class ChandelierRequestDto {
   @IsIn(['daily', 'weekly'])
   timeFrame: 'daily' | 'weekly';
 
-  @IsIn(['BUY', 'SELL'])
-  position: 'BUY' | 'SELL';
-
   @IsNumber()
   atrPeriod: number;
 

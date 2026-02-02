@@ -17,7 +17,6 @@ export class AnalysisController {
     return this.analysisService.calculateChandelier(
       dto.ticker,
       dto.timeFrame,
-      dto.position,
       dto.atrPeriod,
       dto.multiplier,
     );
