@@ -58,7 +58,8 @@ export function runSimulation(
       }
 
       if (exitPrice !== null) {
-        const pnl = exitPrice - position.entryPrice;
+        const quantity = params.positionSize / position.entryPrice;
+        const pnl = quantity * (exitPrice - position.entryPrice);
         trades.push({
           entryDate: position.entryDate,
           entryPrice: position.entryPrice,
@@ -67,7 +68,7 @@ export function runSimulation(
           type: 'BUY',
           signalType: position.signalType,
           pnl,
-          pnlPercent: (pnl / position.entryPrice) * 100,
+          pnlPercent: (pnl / params.positionSize) * 100,
         });
         position = null;
       }
