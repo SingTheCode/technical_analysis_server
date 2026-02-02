@@ -49,6 +49,7 @@ describe('StockService', () => {
       // Then: 올바른 URL로 호출되고 데이터 반환
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining('range=3mo&interval=1d'),
+        expect.any(Object),
       );
       expect(result.data).toHaveLength(1);
       expect(result.data[0].open).toBe(100);
@@ -89,6 +90,7 @@ describe('StockService', () => {
       // Then: 올바른 URL로 호출
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining('range=1y&interval=1wk'),
+        expect.any(Object),
       );
     });
 

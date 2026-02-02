@@ -14,8 +14,9 @@ export class StockService {
   async getOHLCV(
     ticker: string,
     timeFrame: TimeFrame,
+    periodOverride?: string,
   ): Promise<{ ticker: string; timeFrame: TimeFrame; data: OHLCVBar[] }> {
-    const period = PERIOD_BY_TIMEFRAME[timeFrame];
+    const period = periodOverride ?? PERIOD_BY_TIMEFRAME[timeFrame];
     const interval = INTERVAL_BY_TIMEFRAME[timeFrame];
 
     const url = `${YAHOO_API_BASE}/${ticker}?range=${period}&interval=${interval}`;

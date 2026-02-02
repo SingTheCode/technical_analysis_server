@@ -52,7 +52,7 @@ describe('BacktestService', () => {
       chandelierMult: 3,
     });
 
-    expect(stockService.getOHLCV).toHaveBeenCalledWith('AAPL', 'daily');
+    expect(stockService.getOHLCV).toHaveBeenCalledWith('AAPL', 'daily', '1y');
     expect(result).toHaveProperty('trades');
     expect(result).toHaveProperty('summary');
   });
