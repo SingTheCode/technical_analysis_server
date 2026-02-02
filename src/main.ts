@@ -8,8 +8,8 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:3000',
-      'http://localhost:3001',
-      'https://api-chart.climingo.de',
+      'https://api-chart.singco.de',
+      'https://chart-clover.vercel.app',
     ],
     credentials: true,
   });
