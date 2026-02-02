@@ -1,0 +1,25 @@
+services:
+  technical-analysis-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: technical-analysis-server
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    networks:
+      - climingo-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+networks:
+  climingo-network:
+    external: true

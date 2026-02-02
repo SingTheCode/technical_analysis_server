@@ -1,6 +1,10 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { OHLCVBar } from '../stock/types/ohlcv.entity';
-import { AnalysisParams, AnalysisResult, Signal } from './types/analysis.entity';
+import {
+  AnalysisParams,
+  AnalysisResult,
+  Signal,
+} from './types/analysis.entity';
 import { transformDailyToWeekly } from './lib/transform';
 import { calculateATR, calculateBollingerBands } from './lib/indicators';
 import {
@@ -81,7 +85,11 @@ export class AnalysisService {
 
     if (position === 'BUY') {
       let highestHigh = -Infinity;
-      for (let i = Math.max(0, lastIndex - atrPeriod + 1); i <= lastIndex; i++) {
+      for (
+        let i = Math.max(0, lastIndex - atrPeriod + 1);
+        i <= lastIndex;
+        i++
+      ) {
         highestHigh = Math.max(highestHigh, data[i].high);
       }
       return {
@@ -91,7 +99,11 @@ export class AnalysisService {
       };
     } else {
       let lowestLow = Infinity;
-      for (let i = Math.max(0, lastIndex - atrPeriod + 1); i <= lastIndex; i++) {
+      for (
+        let i = Math.max(0, lastIndex - atrPeriod + 1);
+        i <= lastIndex;
+        i++
+      ) {
         lowestLow = Math.min(lowestLow, data[i].low);
       }
       return {
