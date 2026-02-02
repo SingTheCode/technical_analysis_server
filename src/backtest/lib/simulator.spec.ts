@@ -252,4 +252,168 @@ describe('runSimulation', () => {
     expect(result.summary.lossCount).toBe(0);
     expect(result.summary.winRate).toBe(100);
   });
+
+  it('maxCapitalUsed와 totalCapitalDeployed 추적', () => {
+    const data: OHLCVBar[] = [
+      {
+        date: '2024-01-01',
+        open: 100,
+        high: 105,
+        low: 99,
+        close: 100,
+        volume: 1000,
+      },
+      {
+        date: '2024-01-02',
+        open: 100,
+        high: 110,
+        low: 99,
+        close: 110,
+        volume: 1000,
+      },
+      {
+        date: '2024-01-03',
+        open: 110,
+        high: 115,
+        low: 108,
+        close: 108,
+        volume: 1000,
+      },
+      {
+        date: '2024-01-04',
+        open: 108,
+        high: 120,
+        low: 107,
+        close: 120,
+        volume: 1000,
+      },
+    ];
+
+    const signals: Signal[] = [
+      {
+        index: 0,
+        date: '2024-01-01',
+        type: 'bb_bounce_buy',
+        signal: 'BUY',
+        confidence: 80,
+        price: 100,
+      },
+      {
+        index: 1,
+        date: '2024-01-02',
+        type: 'bb_rejection_sell',
+        signal: 'SELL',
+        confidence: 80,
+        price: 110,
+      },
+      {
+        index: 2,
+        date: '2024-01-03',
+        type: 'bb_bounce_buy',
+        signal: 'BUY',
+        confidence: 80,
+        price: 108,
+      },
+      {
+        index: 3,
+        date: '2024-01-04',
+        type: 'bb_rejection_sell',
+        signal: 'SELL',
+        confidence: 80,
+        price: 120,
+      },
+    ];
+
+    const result = runSimulation(data, signals, {
+      initialCapital: 10000,
+      positionSize: 1000,
+    });
+
+    // 2번의 거래, 각각 $1000 사용
+    expect(result.summary.maxCapitalUsed).toBe(1000);
+    expect(result.summary.totalCapitalDeployed).toBe(2000);
+  });
+
+  it('confidenceScaling 적용 시 maxCapitalUsed 추적', () => {
+    const data: OHLCVBar[] = [
+      {
+        date: '2024-01-01',
+        open: 100,
+        high: 105,
+        low: 99,
+        close: 100,
+        volume: 1000,
+      },
+      {
+        date: '2024-01-02',
+        open: 100,
+        high: 110,
+        low: 99,
+        close: 110,
+        volume: 1000,
+      },
+      {
+        date: '2024-01-03',
+        open: 110,
+        high: 115,
+        low: 108,
+        close: 108,
+        volume: 1000,
+      },
+      {
+        date: '2024-01-04',
+        open: 108,
+        high: 120,
+        low: 107,
+        close: 120,
+        volume: 1000,
+      },
+    ];
+
+    const signals: Signal[] = [
+      {
+        index: 0,
+        date: '2024-01-01',
+        type: 'bb_bounce_buy',
+        signal: 'BUY',
+        confidence: 70,
+        price: 100,
+      },
+      {
+        index: 1,
+        date: '2024-01-02',
+        type: 'bb_rejection_sell',
+        signal: 'SELL',
+        confidence: 80,
+        price: 110,
+      },
+      {
+        index: 2,
+        date: '2024-01-03',
+        type: 'bb_bounce_buy',
+        signal: 'BUY',
+        confidence: 140,
+        price: 108,
+      },
+      {
+        index: 3,
+        date: '2024-01-04',
+        type: 'bb_rejection_sell',
+        signal: 'SELL',
+        confidence: 80,
+        price: 120,
+      },
+    ];
+
+    const result = runSimulation(data, signals, {
+      initialCapital: 10000,
+      positionSize: 1000,
+      confidenceScaling: true,
+    });
+
+    // confidence 70 → scaledSize = 1000 * (70/70)^2 = 1000
+    // confidence 140 → scaledSize = 1000 * (140/70)^2 = 4000
+    expect(result.summary.maxCapitalUsed).toBe(4000);
+    expect(result.summary.totalCapitalDeployed).toBe(5000);
+  });
 });

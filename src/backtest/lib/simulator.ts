@@ -37,6 +37,9 @@ export function runSimulation(
     positionSize: number;
   } | null = null;
 
+  let maxCapitalUsed = 0;
+  let totalCapitalDeployed = 0;
+
   for (let i = 0; i < data.length; i++) {
     const bar = data[i];
     const signal = filtered.find((s) => s.index === i);
@@ -77,7 +80,7 @@ export function runSimulation(
 
     if (!position && signal?.signal === 'BUY') {
       const scaledSize = confidenceScaling
-        ? params.positionSize * Math.pow(signal.confidence / 70, 2) // 더 공격적인 스케일링
+        ? params.positionSize * Math.pow(signal.confidence / 70, 2)
         : params.positionSize;
 
       position = {
@@ -86,15 +89,28 @@ export function runSimulation(
         signalType: signal.type,
         positionSize: scaledSize,
       };
+
+      maxCapitalUsed = Math.max(maxCapitalUsed, scaledSize);
+      totalCapitalDeployed += scaledSize;
     }
   }
 
-  return { trades, summary: calculateSummary(trades, params.initialCapital) };
+  return {
+    trades,
+    summary: calculateSummary(
+      trades,
+      params.initialCapital,
+      maxCapitalUsed,
+      totalCapitalDeployed,
+    ),
+  };
 }
 
 function calculateSummary(
   trades: Trade[],
   initialCapital: number,
+  maxCapitalUsed: number,
+  totalCapitalDeployed: number,
 ): BacktestSummary {
   if (trades.length === 0) {
     return {
@@ -105,6 +121,8 @@ function calculateSummary(
       totalPnl: 0,
       totalPnlPercent: 0,
       maxDrawdown: 0,
+      maxCapitalUsed: 0,
+      totalCapitalDeployed: 0,
     };
   }
 
@@ -129,5 +147,7 @@ function calculateSummary(
     totalPnl,
     totalPnlPercent: (totalPnl / initialCapital) * 100,
     maxDrawdown,
+    maxCapitalUsed,
+    totalCapitalDeployed,
   };
 }

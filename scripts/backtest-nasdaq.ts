@@ -8,7 +8,7 @@ const PARAMS = {
   bbPeriod: 20,
   bbStdMult: 2,
   chandelierMult: 3,
-  minConfidence: 85,
+  minConfidence: 100,
   confidenceScaling: true,
 };
 
@@ -44,6 +44,8 @@ async function run() {
       winRate: number;
       pnl: number;
       pnlPct: number;
+      maxCapitalUsed: number;
+      totalCapitalDeployed: number;
     }> = [];
 
     for (const ticker of tickers) {
@@ -59,6 +61,8 @@ async function run() {
           winRate: summary.winRate,
           pnl: summary.totalPnl,
           pnlPct: summary.totalPnlPercent,
+          maxCapitalUsed: summary.maxCapitalUsed,
+          totalCapitalDeployed: summary.totalCapitalDeployed,
         });
         console.log(
           `✓ ${ticker}: ${summary.totalTrades}건, 승률 ${summary.winRate.toFixed(1)}%, PnL $${summary.totalPnl.toFixed(2)} (${summary.totalPnlPercent.toFixed(2)}%)`,
@@ -74,13 +78,16 @@ async function run() {
       ? valid.reduce((s, r) => s + r.winRate, 0) / valid.length
       : 0;
     const totalPnl = results.reduce((s, r) => s + r.pnl, 0);
-    const totalInvested = results.reduce(
-      (s, r) => s + r.trades * PARAMS.positionSize,
-      0,
-    );
-    const totalReturn = totalInvested ? (totalPnl / totalInvested) * 100 : 0;
+    const totalMaxCapital = results.reduce((s, r) => s + r.maxCapitalUsed, 0);
+    const totalReturn =
+      totalMaxCapital > 0 ? (totalPnl / totalMaxCapital) * 100 : 0;
     const years = timeFrame === 'weekly' ? 3 : 1;
-    const annualReturn = totalReturn / years;
+    const cagr =
+      totalMaxCapital > 0
+        ? (Math.pow((totalMaxCapital + totalPnl) / totalMaxCapital, 1 / years) -
+            1) *
+          100
+        : 0;
 
     console.log(`\n--- ${timeFrame} 결과 (승률 기준) ---`);
     console.table(
@@ -95,7 +102,7 @@ async function run() {
         })),
     );
     console.log(
-      `\n📊 평균 승률: ${avgWinRate.toFixed(1)}% | PnL 합계: $${totalPnl.toFixed(2)} | 총 투자: $${totalInvested.toLocaleString()} | 손익률: ${totalReturn.toFixed(2)}% | 연 평균: ${annualReturn.toFixed(2)}%`,
+      `\n📊 평균 승률: ${avgWinRate.toFixed(1)}% | PnL 합계: $${totalPnl.toFixed(2)} | 최대 사용 자본: $${totalMaxCapital.toLocaleString()} | 손익률: ${totalReturn.toFixed(2)}% | 연환산(CAGR): ${cagr.toFixed(2)}%`,
     );
   }
 }

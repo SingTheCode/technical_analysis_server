@@ -7,6 +7,7 @@ export interface BacktestParams extends Omit<AnalysisParams, 'timeFrame'> {
   stopLossPercent?: number;
   takeProfitPercent?: number;
   minConfidence?: number;
+  confidenceScaling?: boolean;
   timeFrame?: 'daily' | 'weekly';
 }
 
@@ -29,6 +30,8 @@ export interface BacktestSummary {
   totalPnl: number;
   totalPnlPercent: number;
   maxDrawdown: number;
+  maxCapitalUsed: number;
+  totalCapitalDeployed: number;
 }
 
 export interface BacktestResult {
