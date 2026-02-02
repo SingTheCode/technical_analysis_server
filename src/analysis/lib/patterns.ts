@@ -5,6 +5,20 @@ import { BollingerBand, Signal } from '../types/analysis.entity';
 
 // ===== 유틸리티 함수 =====
 
+/** 추세 계산: 현재 SMA vs 과거 SMA 비교. 양수=상승, 음수=하락 */
+function calculateTrend(
+  data: OHLCVBar[],
+  index: number,
+  period: number = 20,
+): number {
+  if (index < period * 2) return 0;
+  const recent = data.slice(index - period + 1, index + 1);
+  const old = data.slice(index - period * 2 + 1, index - period + 1);
+  const recentSma = recent.reduce((s, d) => s + d.close, 0) / period;
+  const oldSma = old.reduce((s, d) => s + d.close, 0) / period;
+  return (recentSma - oldSma) / oldSma;
+}
+
 /** N일 이동평균 거래량 계산. 현재 거래량이 평소 대비 높은지 판단하는 기준값 제공 */
 function calculateAverageVolume(data: OHLCVBar[], period: number): number[] {
   const result: number[] = [];
@@ -65,8 +79,22 @@ function analyzeBullishReversal(
   currATR: number,
   volumeConfirm: boolean,
   index: number,
+  trend: number,
+  data: OHLCVBar[],
 ): Signal | null {
   if (!currBB?.lower || !currBB?.upper || !prevBB?.lower) return null;
+
+  // 추세 필터: 강한 하락추세에서만 차단
+  if (trend < -0.05) return null;
+
+  // 연속 하락 필터: 3주 연속 하락 후 반등은 위험
+  if (index >= 3) {
+    const consecutiveDown =
+      data[index - 3].close > data[index - 2].close &&
+      data[index - 2].close > data[index - 1].close &&
+      data[index - 1].close > prev.close;
+    if (consecutiveDown) return null;
+  }
 
   const bbWidth = currBB.upper - currBB.lower;
   const pricePosition = (curr.close - currBB.lower) / bbWidth;
@@ -76,7 +104,16 @@ function analyzeBullishReversal(
   const currInsideBB = curr.close >= currBB.lower && curr.close <= currBB.upper;
   const confirmed = prevBreachedLower && currInsideBB;
 
-  let baseConfidence = confirmed ? 85 : 50;
+  let baseConfidence = confirmed ? 90 : 55;
+
+  // 추세 기반 신뢰도 조정
+  if (trend > 0.1)
+    baseConfidence += 25; // 강한 상승추세 보너스
+  else if (trend > 0.05)
+    baseConfidence += 20; // 상승추세 보너스
+  else if (trend > 0)
+    baseConfidence += 15; // 약한 상승추세 보너스
+  else baseConfidence -= 20; // 하락추세 페널티
 
   if (!confirmed) {
     if (prev.low < currBB.lower * 1.01) baseConfidence += 15;
@@ -99,7 +136,7 @@ function analyzeBullishReversal(
     bbRecovery: prevBreachedLower && curr.close >= currBB.lower,
     atr: currATR,
     confirmed,
-    metadata: { pricePosition, volumeConfirm, confirmed },
+    metadata: { pricePosition, volumeConfirm, confirmed, trend },
   };
 }
 
@@ -193,6 +230,8 @@ export const detectTwoBarReversal = (
     const volumeConfirm =
       avgVolumes[i] > 0 && curr.volume > avgVolumes[i] * 1.2;
 
+    const trend = calculateTrend(data, i);
+
     // Bullish
     if (
       prev.close < prev.open &&
@@ -208,6 +247,8 @@ export const detectTwoBarReversal = (
         currATR,
         volumeConfirm,
         i,
+        trend,
+        data,
       );
       if (signal) signals.push(signal);
     }
@@ -250,6 +291,10 @@ export const detectWBottom = (
   const { requireBreakout = true, maxLookAhead = 5 } = options;
 
   for (let i = 4; i < data.length - (requireBreakout ? maxLookAhead : 0); i++) {
+    // 추세 필터: 강한 하락추세에서 W바닥 매수 차단
+    const trend = calculateTrend(data, i);
+    if (trend < -0.05) continue;
+
     const low1Idx = findLowestInRange(data, i - 4, i - 2);
     const highIdx = findHighestInRange(data, low1Idx, i - 1);
     const low2Idx = i;
@@ -351,6 +396,7 @@ export const detectBollingerSignals = (
 
     const prev = data[i - 1];
     const curr = data[i];
+    const trend = calculateTrend(data, i);
 
     const bbWidth = currBB.upper - currBB.lower;
     const bbWidthPrev = prevBB.upper - prevBB.lower;
@@ -358,31 +404,36 @@ export const detectBollingerSignals = (
 
     const volumeOk = avgVolumes[i] > 0 && curr.volume > avgVolumes[i] * 1.2;
 
-    // 하단 반등 (매수)
+    // 하단 반등 (매수) - 강한 하락추세에서 차단
     const touchedLower = prev.low <= prevBB.lower * 1.01;
     const bouncingFromLower =
       touchedLower &&
       curr.close > curr.open &&
       curr.close > prevBB.lower &&
-      volumeOk;
+      volumeOk &&
+      trend >= -0.05; // 추세 필터
 
     if (bouncingFromLower) {
       let confidence = 70;
       if (isSqueeze) confidence += 15;
       if (curr.close > prev.high) confidence += 15;
+      if (trend < 0) confidence -= 15; // 약한 하락추세 페널티
 
-      signals.push({
-        index: i,
-        date: curr.date,
-        type: 'bb_bounce_buy',
-        signal: 'BUY',
-        confidence: Math.min(100, confidence),
-        price: curr.close,
-        metadata: {
-          squeeze: isSqueeze,
-          volumeRatio: curr.volume / avgVolumes[i],
-        },
-      });
+      if (confidence >= 60) {
+        signals.push({
+          index: i,
+          date: curr.date,
+          type: 'bb_bounce_buy',
+          signal: 'BUY',
+          confidence: Math.min(100, confidence),
+          price: curr.close,
+          metadata: {
+            squeeze: isSqueeze,
+            volumeRatio: curr.volume / avgVolumes[i],
+            trend,
+          },
+        });
+      }
     }
 
     // 상단 반락 (매도)

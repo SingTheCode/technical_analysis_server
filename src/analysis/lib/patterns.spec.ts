@@ -25,6 +25,63 @@ const createBB = (
 ): BollingerBand => ({ lower, middle, upper, sma: middle });
 
 describe('patterns', () => {
+  describe('detectTwoBarReversal - 추세 필터', () => {
+    it('하락추세에서 매수 신호 차단', () => {
+      // Given: 20일간 하락추세 데이터 (100 → 85, -15%)
+      const data: OHLCVBar[] = Array.from({ length: 22 }, (_, i) => {
+        const price = 100 - i * 0.7; // 점진적 하락
+        return createBar(
+          `2024-01-${String(i + 1).padStart(2, '0')}`,
+          price + 1,
+          price + 2,
+          price - 10,
+          price,
+        );
+      });
+      // Two Bar Reversal 패턴 추가 (음봉 → 양봉)
+      data[20] = createBar('2024-01-21', 88, 89, 78, 82); // 음봉, BB 이탈
+      data[21] = createBar('2024-01-22', 82, 95, 81, 90, 1500000); // 양봉
+
+      const bb: BollingerBand[] = data.map(() => createBB(80, 90, 100));
+      const atrValues = data.map(() => 8);
+
+      // When
+      const signals = detectTwoBarReversal(data, bb, atrValues);
+
+      // Then: 하락추세에서 매수 신호 없음
+      const buySignals = signals.filter((s) => s.signal === 'BUY');
+      expect(buySignals.length).toBe(0);
+    });
+
+    it('상승추세에서는 매수 신호 정상 발생', () => {
+      // Given: 20일간 상승추세 데이터
+      const data: OHLCVBar[] = Array.from({ length: 22 }, (_, i) => {
+        const price = 100 + i * 0.5;
+        return createBar(
+          `2024-01-${String(i + 1).padStart(2, '0')}`,
+          price,
+          price + 2,
+          price - 1,
+          price + 1,
+          1000000,
+        );
+      });
+      // Two Bar Reversal 패턴 (조정 후 반등) - BB 이탈 + 충분한 range
+      data[20] = createBar('2024-01-21', 112, 113, 98, 102); // 음봉, 저가 98 < BB하단 100
+      data[21] = createBar('2024-01-22', 102, 118, 101, 115, 1500000); // 양봉, range=17
+
+      const bb: BollingerBand[] = data.map(() => createBB(100, 110, 120));
+      const atrValues = data.map(() => 8); // range 17 >= 8*1.8=14.4
+
+      // When
+      const signals = detectTwoBarReversal(data, bb, atrValues);
+
+      // Then: 상승추세에서 매수 신호 발생
+      const buySignals = signals.filter((s) => s.signal === 'BUY');
+      expect(buySignals.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('detectTwoBarReversal', () => {
     describe('Bullish 패턴 확정 조건', () => {
       it('왼쪽 bar가 BB 하단 이탈 + 오른쪽 bar가 BB 내부 복귀 시 confirmed=true', () => {

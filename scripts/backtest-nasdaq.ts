@@ -8,6 +8,8 @@ const PARAMS = {
   bbPeriod: 20,
   bbStdMult: 2,
   chandelierMult: 3,
+  minConfidence: 85,
+  confidenceScaling: true,
 };
 
 type TimeFrame = 'daily' | 'weekly';
@@ -23,7 +25,9 @@ async function run() {
   }
 
   if (tickers.length < 2) {
-    console.error('사용법: npx ts-node scripts/backtest-nasdaq.ts <ticker1> <ticker2> [daily] [weekly]');
+    console.error(
+      '사용법: npx ts-node scripts/backtest-nasdaq.ts <ticker1> <ticker2> [daily] [weekly]',
+    );
     process.exit(1);
   }
 
@@ -34,11 +38,21 @@ async function run() {
 
   for (const timeFrame of timeFrames) {
     console.log(`\n=== ${timeFrame.toUpperCase()} 백테스트 ===\n`);
-    const results: Array<{ ticker: string; trades: number; winRate: number; pnl: number; pnlPct: number }> = [];
+    const results: Array<{
+      ticker: string;
+      trades: number;
+      winRate: number;
+      pnl: number;
+      pnlPct: number;
+    }> = [];
 
     for (const ticker of tickers) {
       try {
-        const { summary } = await backtestService.runBacktest({ ticker, timeFrame, ...PARAMS });
+        const { summary } = await backtestService.runBacktest({
+          ticker,
+          timeFrame,
+          ...PARAMS,
+        });
         results.push({
           ticker,
           trades: summary.totalTrades,
@@ -46,7 +60,9 @@ async function run() {
           pnl: summary.totalPnl,
           pnlPct: summary.totalPnlPercent,
         });
-        console.log(`✓ ${ticker}: ${summary.totalTrades}건, 승률 ${summary.winRate.toFixed(1)}%, PnL $${summary.totalPnl.toFixed(2)} (${summary.totalPnlPercent.toFixed(2)}%)`);
+        console.log(
+          `✓ ${ticker}: ${summary.totalTrades}건, 승률 ${summary.winRate.toFixed(1)}%, PnL $${summary.totalPnl.toFixed(2)} (${summary.totalPnlPercent.toFixed(2)}%)`,
+        );
       } catch {
         console.log(`✗ ${ticker}: 데이터 없음`);
       }
@@ -54,10 +70,17 @@ async function run() {
     }
 
     const valid = results.filter((r) => r.trades > 0);
-    const avgWinRate = valid.length ? valid.reduce((s, r) => s + r.winRate, 0) / valid.length : 0;
+    const avgWinRate = valid.length
+      ? valid.reduce((s, r) => s + r.winRate, 0) / valid.length
+      : 0;
     const totalPnl = results.reduce((s, r) => s + r.pnl, 0);
-    const totalInvested = results.reduce((s, r) => s + r.trades * PARAMS.positionSize, 0);
+    const totalInvested = results.reduce(
+      (s, r) => s + r.trades * PARAMS.positionSize,
+      0,
+    );
     const totalReturn = totalInvested ? (totalPnl / totalInvested) * 100 : 0;
+    const years = timeFrame === 'weekly' ? 3 : 1;
+    const annualReturn = totalReturn / years;
 
     console.log(`\n--- ${timeFrame} 결과 (승률 기준) ---`);
     console.table(
@@ -71,7 +94,9 @@ async function run() {
           pnlPct: `${r.pnlPct.toFixed(2)}%`,
         })),
     );
-    console.log(`\n📊 평균 승률: ${avgWinRate.toFixed(1)}% | PnL 합계: $${totalPnl.toFixed(2)} | 총 투자: $${totalInvested.toLocaleString()} | 손익률: ${totalReturn.toFixed(2)}%`);
+    console.log(
+      `\n📊 평균 승률: ${avgWinRate.toFixed(1)}% | PnL 합계: $${totalPnl.toFixed(2)} | 총 투자: $${totalInvested.toLocaleString()} | 손익률: ${totalReturn.toFixed(2)}% | 연 평균: ${annualReturn.toFixed(2)}%`,
+    );
   }
 }
 

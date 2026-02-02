@@ -12,6 +12,7 @@ interface SimulationParams {
   stopLossPercent?: number;
   takeProfitPercent?: number;
   minConfidence?: number;
+  confidenceScaling?: boolean;
 }
 
 export function runSimulation(
@@ -19,7 +20,12 @@ export function runSimulation(
   signals: Signal[],
   params: SimulationParams,
 ): BacktestResult {
-  const { minConfidence = 0, stopLossPercent, takeProfitPercent } = params;
+  const {
+    minConfidence = 0,
+    stopLossPercent,
+    takeProfitPercent,
+    confidenceScaling = false,
+  } = params;
 
   const filtered = signals.filter((s) => s.confidence >= minConfidence);
   const trades: Trade[] = [];
@@ -28,37 +34,32 @@ export function runSimulation(
     entryPrice: number;
     entryDate: string;
     signalType: string;
+    positionSize: number;
   } | null = null;
 
   for (let i = 0; i < data.length; i++) {
     const bar = data[i];
     const signal = filtered.find((s) => s.index === i);
 
-    // 포지션 보유 중 청산 조건 체크
     if (position) {
       let exitPrice: number | null = null;
 
-      // 손절
       if (
         stopLossPercent &&
         bar.low <= position.entryPrice * (1 - stopLossPercent / 100)
       ) {
         exitPrice = bar.close;
-      }
-      // 익절
-      else if (
+      } else if (
         takeProfitPercent &&
         bar.high >= position.entryPrice * (1 + takeProfitPercent / 100)
       ) {
         exitPrice = bar.close;
-      }
-      // 반대 신호
-      else if (signal?.signal === 'SELL') {
+      } else if (signal?.signal === 'SELL') {
         exitPrice = signal.price;
       }
 
       if (exitPrice !== null) {
-        const quantity = params.positionSize / position.entryPrice;
+        const quantity = position.positionSize / position.entryPrice;
         const pnl = quantity * (exitPrice - position.entryPrice);
         trades.push({
           entryDate: position.entryDate,
@@ -68,18 +69,22 @@ export function runSimulation(
           type: 'BUY',
           signalType: position.signalType,
           pnl,
-          pnlPercent: (pnl / params.positionSize) * 100,
+          pnlPercent: (pnl / position.positionSize) * 100,
         });
         position = null;
       }
     }
 
-    // 신규 진입
     if (!position && signal?.signal === 'BUY') {
+      const scaledSize = confidenceScaling
+        ? params.positionSize * Math.pow(signal.confidence / 70, 2) // 더 공격적인 스케일링
+        : params.positionSize;
+
       position = {
         entryPrice: signal.price,
         entryDate: signal.date,
         signalType: signal.type,
+        positionSize: scaledSize,
       };
     }
   }
